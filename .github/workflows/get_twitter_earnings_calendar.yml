@@ -1,0 +1,60 @@
+name: 📅 Get X.com Earnings Calendar
+
+on:
+  repository_dispatch:
+    types: [get-x-earnings-calendar] # Triggered by a repository dispatch event
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: twitter-account-1
+  cancel-in-progress: false # if action is already running, do not cancel it, wait for it to finish
+  
+jobs:
+  get_x_earnings_calendar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install deps
+        run: npm install
+
+      - name: Install Playwright browsers
+        # this will pull down Firefox
+        run: npx playwright install --with-deps firefox
+
+      - name: Run bot
+        env:
+          DISCORD_TOKEN:      ${{ vars.DISCORD_TOKEN }}
+          DISCORD_TWITTER_EARNINGS_CAL_WEBHOOK: ${{ vars.DISCORD_TWITTER_EARNINGS_CAL_WEBHOOK }}
+          X_USERNAMES:        ${{ vars.X_EARNINGS__CAL_USERNAMES }}
+          X_COOKIE_HEADER:    ${{ vars.X_COOKIE_HEADER }}
+        run: node twitter_earnings_calendar/index.mjs
+
+      - name: Commit state
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+
+          # sync any remote changes first
+          git pull --rebase --autostash origin main
+
+          # stage per-user state files
+          git add twitter_earnings_calendar/last_link_*.json
+
+          # commit only if there are changes
+          git diff --cached --quiet || git commit -m "Update last seen links"
+
+          # push back to GitHub
+          git push
